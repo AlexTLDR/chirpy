@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"errors"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -58,4 +61,27 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	}
 	
 	return userID, nil
+}
+
+// GetBearerToken extracts the JWT token from the Authorization header
+func GetBearerToken(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("authorization header not found")
+	}
+	
+	// Split the header value to separate "Bearer" from the token
+	parts := strings.Fields(authHeader) // Use Fields to handle multiple spaces
+	if len(parts) < 2 || strings.ToLower(parts[0]) != "bearer" {
+		return "", errors.New("authorization header must be in format 'Bearer TOKEN'")
+	}
+	
+	// Join all parts after "Bearer" in case the token itself contains spaces
+	token := strings.Join(parts[1:], " ")
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", errors.New("token cannot be empty")
+	}
+	
+	return token, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/AlexTLDR/chirpy/internal/auth"
 	"github.com/AlexTLDR/chirpy/internal/database"
@@ -10,8 +11,9 @@ import (
 
 func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email           string `json:"email"`
+		Password        string `json:"password"`
+		ExpiresInSeconds *int  `json:"expires_in_seconds,omitempty"`
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -72,8 +74,9 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type requestBody struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email            string `json:"email"`
+		Password         string `json:"password"`
+		ExpiresInSeconds *int   `json:"expires_in_seconds,omitempty"`
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -107,13 +110,39 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := User{
-		ID:        dbUser.ID,
-		CreatedAt: dbUser.CreatedAt,
-		UpdatedAt: dbUser.UpdatedAt,
-		Email:     dbUser.Email,
+	// Determine expiration time
+	expiresIn := time.Hour // Default 1 hour
+	if reqBody.ExpiresInSeconds != nil {
+		requestedDuration := time.Duration(*reqBody.ExpiresInSeconds) * time.Second
+		if requestedDuration > time.Hour {
+			expiresIn = time.Hour // Cap at 1 hour
+		} else if requestedDuration > 0 {
+			expiresIn = requestedDuration
+		}
+	}
+
+	// Create JWT token
+	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, expiresIn)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Something went wrong"})
+		return
+	}
+
+	// Response structure with token
+	response := struct {
+		User
+		Token string `json:"token"`
+	}{
+		User: User{
+			ID:        dbUser.ID,
+			CreatedAt: dbUser.CreatedAt,
+			UpdatedAt: dbUser.UpdatedAt,
+			Email:     dbUser.Email,
+		},
+		Token: token,
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(response)
 }

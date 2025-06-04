@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -21,6 +22,115 @@ func TestHashPassword(t *testing.T) {
 	
 	if hash == password {
 		t.Fatal("HashPassword returned the original password instead of a hash")
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		authHeader  string
+		expectToken string
+		expectError bool
+	}{
+		{
+			name:        "valid bearer token",
+			authHeader:  "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectError: false,
+		},
+		{
+			name:        "valid bearer token with extra spaces",
+			authHeader:  "Bearer  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9  ",
+			expectToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectError: false,
+		},
+		{
+			name:        "case insensitive bearer",
+			authHeader:  "bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectError: false,
+		},
+		{
+			name:        "mixed case bearer",
+			authHeader:  "BeArEr eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectError: false,
+		},
+		{
+			name:        "empty authorization header",
+			authHeader:  "",
+			expectToken: "",
+			expectError: true,
+		},
+		{
+			name:        "wrong format - no bearer prefix",
+			authHeader:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			expectToken: "",
+			expectError: true,
+		},
+		{
+			name:        "wrong format - basic auth",
+			authHeader:  "Basic dXNlcjpwYXNzd29yZA==",
+			expectToken: "",
+			expectError: true,
+		},
+		{
+			name:        "bearer with empty token",
+			authHeader:  "Bearer ",
+			expectToken: "",
+			expectError: true,
+		},
+		{
+			name:        "bearer with only spaces",
+			authHeader:  "Bearer    ",
+			expectToken: "",
+			expectError: true,
+		},
+		{
+			name:        "too many parts",
+			authHeader:  "Bearer token extra part",
+			expectToken: "token extra part",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := make(http.Header)
+			if tt.authHeader != "" {
+				headers.Set("Authorization", tt.authHeader)
+			}
+
+			token, err := GetBearerToken(headers)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+				if token != tt.expectToken {
+					t.Errorf("Expected token %q but got %q", tt.expectToken, token)
+				}
+			}
+		})
+	}
+}
+
+func TestGetBearerTokenWithMissingHeader(t *testing.T) {
+	headers := make(http.Header)
+	// Don't set any Authorization header
+
+	_, err := GetBearerToken(headers)
+	if err == nil {
+		t.Fatal("GetBearerToken should have failed with missing Authorization header")
+	}
+
+	expectedError := "authorization header not found"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error %q but got %q", expectedError, err.Error())
 	}
 }
 
