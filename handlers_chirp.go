@@ -15,7 +15,19 @@ func (cfg *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		cfg.handlerCreateChirp(w, r)
 	case http.MethodGet:
-		cfg.handlerGetChirps(w, r)
+		// Parse the path to see if we have an ID
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+
+		if len(pathParts) == 2 && pathParts[0] == "api" && pathParts[1] == "chirps" {
+			// Get all chirps
+			cfg.handlerGetChirps(w, r)
+		} else if len(pathParts) == 3 && pathParts[0] == "api" && pathParts[1] == "chirps" {
+			// Get specific chirp by ID
+			chirpIDStr := pathParts[2]
+			cfg.handlerGetChirpByID(w, r, chirpIDStr)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -98,6 +110,35 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(chirps)
+}
+
+func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request, chirpIDStr string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	chirpID, err := uuid.Parse(chirpIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid chirp ID"})
+		return
+	}
+
+	dbChirp, err := cfg.dbQueries.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Chirp not found"})
+		return
+	}
+
+	chirp := Chirp{
+		ID:        dbChirp.ID,
+		CreatedAt: dbChirp.CreatedAt,
+		UpdatedAt: dbChirp.UpdatedAt,
+		Body:      dbChirp.Body,
+		UserID:    dbChirp.UserID,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(chirp)
 }
 
 func cleanProfanity(text string) string {
