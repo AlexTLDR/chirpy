@@ -1,25 +1,51 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
+
+	"github.com/AlexTLDR/chirpy/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbQueries      *database.Queries
 }
 
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL environment variable is not set")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal("Error opening database:", err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
+		dbQueries:      dbQueries,
 	}
 
 	mux := http.NewServeMux()
@@ -106,12 +132,12 @@ func (cfg *apiConfig) handlerValidateChirp(w http.ResponseWriter, r *http.Reques
 func cleanProfanity(text string) string {
 	profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
 	words := strings.Fields(text)
-	
+
 	for i, word := range words {
 		if slices.Contains(profaneWords, strings.ToLower(word)) {
 			words[i] = "****"
 		}
 	}
-	
+
 	return strings.Join(words, " ")
 }
