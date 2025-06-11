@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/AlexTLDR/chirpy/internal/auth"
@@ -153,6 +154,21 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 			Body:      dbChirp.Body,
 			UserID:    dbChirp.UserID,
 		}
+	}
+
+	// Check for sort query parameter
+	sortParam := r.URL.Query().Get("sort")
+	
+	// Sort chirps based on the sort parameter (default is ascending)
+	if sortParam == "desc" {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		})
+	} else {
+		// Default to ascending order (asc or no parameter)
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+		})
 	}
 
 	w.WriteHeader(http.StatusOK)
