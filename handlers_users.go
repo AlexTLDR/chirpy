@@ -224,3 +224,86 @@ func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
 	// Return 204 No Content
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	type requestBody struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Extract and validate access token
+	accessToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	// Validate the JWT token and get user ID
+	userID, err := auth.ValidateJWT(accessToken, cfg.jwtSecret)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	// Parse request body
+	decoder := json.NewDecoder(r.Body)
+	reqBody := requestBody{}
+	err = decoder.Decode(&reqBody)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Something went wrong"})
+		return
+	}
+
+	if reqBody.Email == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Email is required"})
+		return
+	}
+
+	if reqBody.Password == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Password is required"})
+		return
+	}
+
+	// Hash the new password
+	hashedPassword, err := auth.HashPassword(reqBody.Password)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Something went wrong"})
+		return
+	}
+
+	// Update the user in the database
+	dbUser, err := cfg.dbQueries.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:             userID,
+		Email:          reqBody.Email,
+		HashedPassword: hashedPassword,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Something went wrong"})
+		return
+	}
+
+	// Return updated user (without password)
+	user := User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt,
+		Email:     dbUser.Email,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
+}
