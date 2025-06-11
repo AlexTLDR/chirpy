@@ -134,6 +134,66 @@ func TestGetBearerTokenWithMissingHeader(t *testing.T) {
 	}
 }
 
+func TestMakeRefreshToken(t *testing.T) {
+	token, err := MakeRefreshToken()
+	if err != nil {
+		t.Fatalf("MakeRefreshToken failed: %v", err)
+	}
+
+	if token == "" {
+		t.Fatal("MakeRefreshToken returned empty token")
+	}
+
+	// Token should be 64 characters (32 bytes hex encoded)
+	if len(token) != 64 {
+		t.Fatalf("Expected token length 64, got %d", len(token))
+	}
+
+	// Token should be valid hex
+	for _, char := range token {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			t.Fatalf("Token contains invalid hex character: %c", char)
+		}
+	}
+}
+
+func TestMakeRefreshTokenUniqueness(t *testing.T) {
+	tokens := make(map[string]bool)
+	numTokens := 100
+
+	for i := 0; i < numTokens; i++ {
+		token, err := MakeRefreshToken()
+		if err != nil {
+			t.Fatalf("MakeRefreshToken failed on iteration %d: %v", i, err)
+		}
+
+		if tokens[token] {
+			t.Fatalf("MakeRefreshToken generated duplicate token: %s", token)
+		}
+		tokens[token] = true
+	}
+
+	if len(tokens) != numTokens {
+		t.Fatalf("Expected %d unique tokens, got %d", numTokens, len(tokens))
+	}
+}
+
+func TestMakeRefreshTokenMultipleCalls(t *testing.T) {
+	token1, err := MakeRefreshToken()
+	if err != nil {
+		t.Fatalf("First MakeRefreshToken failed: %v", err)
+	}
+
+	token2, err := MakeRefreshToken()
+	if err != nil {
+		t.Fatalf("Second MakeRefreshToken failed: %v", err)
+	}
+
+	if token1 == token2 {
+		t.Fatal("MakeRefreshToken returned the same token on consecutive calls")
+	}
+}
+
 func TestCheckPasswordHash(t *testing.T) {
 	password := "testpassword123"
 	
