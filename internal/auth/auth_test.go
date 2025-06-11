@@ -369,3 +369,112 @@ func TestJWTRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAPIKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		authHeader  string
+		expectKey   string
+		expectError bool
+	}{
+		{
+			name:        "valid api key",
+			authHeader:  "ApiKey my-secret-api-key",
+			expectKey:   "my-secret-api-key",
+			expectError: false,
+		},
+		{
+			name:        "valid api key with extra spaces",
+			authHeader:  "ApiKey  my-secret-api-key  ",
+			expectKey:   "my-secret-api-key",
+			expectError: false,
+		},
+		{
+			name:        "case insensitive apikey",
+			authHeader:  "apikey my-secret-api-key",
+			expectKey:   "my-secret-api-key",
+			expectError: false,
+		},
+		{
+			name:        "mixed case apikey",
+			authHeader:  "ApIkEy my-secret-api-key",
+			expectKey:   "my-secret-api-key",
+			expectError: false,
+		},
+		{
+			name:        "empty authorization header",
+			authHeader:  "",
+			expectKey:   "",
+			expectError: true,
+		},
+		{
+			name:        "wrong format - no apikey prefix",
+			authHeader:  "my-secret-api-key",
+			expectKey:   "",
+			expectError: true,
+		},
+		{
+			name:        "wrong format - bearer auth",
+			authHeader:  "Bearer my-secret-api-key",
+			expectKey:   "",
+			expectError: true,
+		},
+		{
+			name:        "apikey with empty key",
+			authHeader:  "ApiKey ",
+			expectKey:   "",
+			expectError: true,
+		},
+		{
+			name:        "apikey with only spaces",
+			authHeader:  "ApiKey    ",
+			expectKey:   "",
+			expectError: true,
+		},
+		{
+			name:        "too many parts",
+			authHeader:  "ApiKey secret key with spaces",
+			expectKey:   "secret key with spaces",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := make(http.Header)
+			if tt.authHeader != "" {
+				headers.Set("Authorization", tt.authHeader)
+			}
+
+			key, err := GetAPIKey(headers)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+				if key != tt.expectKey {
+					t.Errorf("Expected key %q but got %q", tt.expectKey, key)
+				}
+			}
+		})
+	}
+}
+
+func TestGetAPIKeyWithMissingHeader(t *testing.T) {
+	headers := make(http.Header)
+	// Don't set any Authorization header
+
+	_, err := GetAPIKey(headers)
+	if err == nil {
+		t.Fatal("GetAPIKey should have failed with missing Authorization header")
+	}
+
+	expectedError := "authorization header not found"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error %q but got %q", expectedError, err.Error())
+	}
+}

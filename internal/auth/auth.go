@@ -101,3 +101,26 @@ func MakeRefreshToken() (string, error) {
 	token := hex.EncodeToString(bytes)
 	return token, nil
 }
+
+// GetAPIKey extracts the API key from the Authorization header
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("authorization header not found")
+	}
+	
+	// Split the header value to separate "ApiKey" from the key
+	parts := strings.Fields(authHeader) // Use Fields to handle multiple spaces
+	if len(parts) < 2 || strings.ToLower(parts[0]) != "apikey" {
+		return "", errors.New("authorization header must be in format 'ApiKey KEY'")
+	}
+	
+	// Join all parts after "ApiKey" in case the key itself contains spaces
+	key := strings.Join(parts[1:], " ")
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", errors.New("api key cannot be empty")
+	}
+	
+	return key, nil
+}

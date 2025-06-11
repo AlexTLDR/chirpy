@@ -318,6 +318,18 @@ func (cfg *apiConfig) handlerPolkaWebhook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check API key authentication
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if apiKey != cfg.polkaKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	type webhookData struct {
 		UserID string `json:"user_id"`
 	}
@@ -331,7 +343,7 @@ func (cfg *apiConfig) handlerPolkaWebhook(w http.ResponseWriter, r *http.Request
 
 	decoder := json.NewDecoder(r.Body)
 	reqBody := webhookRequest{}
-	err := decoder.Decode(&reqBody)
+	err = decoder.Decode(&reqBody)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
