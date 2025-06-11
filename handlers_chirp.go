@@ -29,6 +29,17 @@ func (cfg *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
+	case http.MethodDelete:
+		// Parse the path to get chirp ID
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		
+		if len(pathParts) == 3 && pathParts[0] == "api" && pathParts[1] == "chirps" {
+			// Delete specific chirp by ID
+			chirpIDStr := pathParts[2]
+			cfg.handlerDeleteChirp(w, r, chirpIDStr)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -154,6 +165,59 @@ func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(chirp)
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request, chirpIDStr string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Extract and validate JWT token
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	// Parse chirp ID
+	chirpID, err := uuid.Parse(chirpIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid chirp ID"})
+		return
+	}
+
+	// Get the chirp to check if it exists and if user owns it
+	dbChirp, err := cfg.dbQueries.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Chirp not found"})
+		return
+	}
+
+	// Check if the user is the author of the chirp
+	if dbChirp.UserID != userID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "You can only delete your own chirps"})
+		return
+	}
+
+	// Delete the chirp
+	err = cfg.dbQueries.DeleteChirp(r.Context(), chirpID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Something went wrong"})
+		return
+	}
+
+	// Return 204 No Content
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func cleanProfanity(text string) string {
