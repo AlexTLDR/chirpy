@@ -41,24 +41,11 @@ func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
 
 	cfg.fileserverHits.Store(0)
 	
+	// Delete users - CASCADE will automatically delete chirps and refresh_tokens
 	err := cfg.dbQueries.DeleteAllUsers(r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Error deleting users"))
-		return
-	}
-
-	err = cfg.dbQueries.DeleteAllChirps(r.Context())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error deleting chirps"))
-		return
-	}
-
-	err = cfg.dbQueries.DeleteAllRefreshTokens(r.Context())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error deleting refresh tokens"))
 		return
 	}
 
